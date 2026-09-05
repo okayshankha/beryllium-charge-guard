@@ -1,0 +1,11 @@
+[Unit]
+Description=Run charge ICL guard periodically
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=15s
+AccuracySec=5s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=Charge ICL guard (throttle charging at thresholds)
+
+[Service]
+Type=oneshot
+Environment=STOP_THRESHOLD=80
+Environment=START_THRESHOLD=40
+Environment=ICL_LOW=100000
+ExecStart=/usr/local/bin/charge-icl-guard
