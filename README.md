@@ -1,4 +1,4 @@
-# beryllium-charge-guard
+# Beryllium Charge Guard
 
 An ICL-based charging guard for postmarketOS and Qualcomm power-supply
 interfaces. It limits USB input current according to battery capacity instead
