@@ -113,21 +113,26 @@ restore_saved_icl() {
 
   # Restore the charger limit before removing the guard. This prevents the
   # last LOW value from remaining active after uninstall.
-  for node in /sys/class/power_supply/pmi8998-charger/current_max \
-              /sys/class/power_supply/*/current_max \
-              /sys/class/power_supply/*/input_current_limit; do
-    [ -e "$node" ] || continue
-    # Sysfs may report online=0 briefly during service shutdown, and its
-    # mode bits are not always a reliable writability check for root.
-    printf "%s\n" "$high" > "$node" 2>/dev/null || continue
-    if [ "$(cat "$node" 2>/dev/null || true)" = "$high" ]; then
-      echo "Restored charger input current to ${high} uA."
-      rm -f "$STATE"
-      return 0
-    fi
-  done
+  node=/sys/class/power_supply/pmi8998-charger/current_max
+  if [ ! -e "$node" ]; then
+    echo "Warning: Poco F1 charger node not found: $node" >&2
+    return 0
+  fi
 
-  echo "Warning: could not restore saved charger input current (${high} uA)." >&2
+  # Sysfs may report online=0 briefly during service shutdown, and its mode
+  # bits are not always a reliable writability check for root.
+  if ! printf "%s\n" "$high" > "$node" 2>/dev/null; then
+    echo "Warning: write failed for $node (wanted ${high} uA)." >&2
+    return 0
+  fi
+  actual=$(cat "$node" 2>/dev/null || true)
+  if [ "$actual" = "$high" ]; then
+    echo "Restored charger input current to ${high} uA."
+    rm -f "$STATE"
+    return 0
+  fi
+
+  echo "Warning: $node read back ${actual:-unknown} uA (wanted ${high} uA)." >&2
 }
 
 uninstall_files() {
