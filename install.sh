@@ -100,6 +100,10 @@ restore_saved_icl() {
       return 0
       ;;
   esac
+  if [ "$high" -le 0 ] || [ $((high % 25000)) -ne 0 ]; then
+    echo "Warning: ignoring invalid saved ICL value: $high uA." >&2
+    return 0
+  fi
 
   # Restore the charger limit before removing the guard. This prevents the
   # last LOW value from remaining active after uninstall.
