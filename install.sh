@@ -7,6 +7,12 @@
 
 set -eu
 
+sh ./fix-line-endings.sh
+sh -n charge_icl_guard.sh
+sh -n battinfo.sh
+sh -n icl-menu.sh
+sh -n install.sh
+
 # --- re-exec as root via doas/sudo if needed ---
 if [ "$(id -u)" -ne 0 ]; then
   if command -v doas >/dev/null 2>&1; then
