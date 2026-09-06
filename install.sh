@@ -113,8 +113,9 @@ restore_saved_icl() {
 
   # Restore the charger limit before removing the guard. This prevents the
   # last LOW value from remaining active after uninstall.
-  for node in /sys/class/power_supply/*/input_current_limit \
-              /sys/class/power_supply/*/current_max; do
+  for node in /sys/class/power_supply/pmi8998-charger/current_max \
+              /sys/class/power_supply/*/current_max \
+              /sys/class/power_supply/*/input_current_limit; do
     [ -e "$node" ] || continue
     # Sysfs may report online=0 briefly during service shutdown, and its
     # mode bits are not always a reliable writability check for root.
@@ -130,11 +131,13 @@ restore_saved_icl() {
 }
 
 uninstall_files() {
+  # Restore while the charger is still online. The Qualcomm current_max node
+  # can reject writes after service shutdown changes its transient state.
+  restore_saved_icl
+
   echo "Disabling services..."
   systemctl disable --now charge-icl-guard.timer 2>/dev/null || true
   systemctl disable --now charge-icl-guard.service 2>/dev/null || true
-
-  restore_saved_icl
 
   echo "Removing files..."
   rm -f /usr/local/bin/charge-icl-guard \
