@@ -75,6 +75,13 @@ install_files() {
   systemctl daemon-reload
   systemctl enable --now charge-icl-guard.timer
 
+  # Apply the policy once immediately so a fresh install/reinstall is active
+  # right away instead of waiting for the next timer tick.
+  echo "Running an immediate guard pass..."
+  if ! systemctl start charge-icl-guard.service; then
+    echo "Warning: initial guard run failed; timer remains installed." >&2
+  fi
+
   echo
   echo "Installed. Quick check:"
   /usr/local/bin/battinfo || true
@@ -107,4 +114,3 @@ else
   require_files
   install_files
 fi
-
