@@ -116,18 +116,13 @@ restore_saved_icl() {
   for node in /sys/class/power_supply/*/input_current_limit \
               /sys/class/power_supply/*/current_max; do
     [ -e "$node" ] || continue
-    charger_dir=${node%/*}
-    if [ -e "$charger_dir/online" ] &&
-       [ "$(cat "$charger_dir/online" 2>/dev/null || true)" != "1" ]; then
-      continue
-    fi
-    if [ -w "$node" ]; then
-      printf "%s\n" "$high" > "$node" 2>/dev/null || continue
-      if [ "$(cat "$node" 2>/dev/null || true)" = "$high" ]; then
-        echo "Restored charger input current to ${high} uA."
-        rm -f "$STATE"
-        return 0
-      fi
+    # Sysfs may report online=0 briefly during service shutdown, and its
+    # mode bits are not always a reliable writability check for root.
+    printf "%s\n" "$high" > "$node" 2>/dev/null || continue
+    if [ "$(cat "$node" 2>/dev/null || true)" = "$high" ]; then
+      echo "Restored charger input current to ${high} uA."
+      rm -f "$STATE"
+      return 0
     fi
   done
 
