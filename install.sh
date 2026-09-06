@@ -121,28 +121,35 @@ restore_saved_icl() {
 
   # Sysfs may report online=0 briefly during service shutdown, and its mode
   # bits are not always a reliable writability check for root.
-  if ! printf "%s\n" "$high" > "$node" 2>/dev/null; then
-    echo "Warning: write failed for $node (wanted ${high} uA)." >&2
-    return 0
-  fi
-  actual=$(cat "$node" 2>/dev/null || true)
-  if [ "$actual" = "$high" ]; then
-    echo "Restored charger input current to ${high} uA."
-    rm -f "$STATE"
-    return 0
-  fi
+  attempt=1
+  while [ "$attempt" -le 3 ]; do
+    if printf "%s\n" "$high" > "$node" 2>/dev/null; then
+      actual=$(cat "$node" 2>/dev/null || true)
+      if [ "$actual" = "$high" ]; then
+        echo "Restored charger input current to ${high} uA."
+        rm -f "$STATE"
+        return 0
+      fi
+    else
+      actual="write failed"
+    fi
+    [ "$attempt" -lt 3 ] && sleep 1
+    attempt=$((attempt + 1))
+  done
 
   echo "Warning: $node read back ${actual:-unknown} uA (wanted ${high} uA)." >&2
 }
 
 uninstall_files() {
-  # Restore while the charger is still online. The Qualcomm current_max node
-  # can reject writes after service shutdown changes its transient state.
-  restore_saved_icl
-
   echo "Disabling services..."
+  # Stop future timer invocations before restoring the limit. Otherwise a
+  # final guard pass can immediately overwrite the restored value with LOW.
   systemctl disable --now charge-icl-guard.timer 2>/dev/null || true
   systemctl disable --now charge-icl-guard.service 2>/dev/null || true
+
+  # Restore after shutdown, retrying briefly in case a final queued invocation
+  # is still completing.
+  restore_saved_icl
 
   echo "Removing files..."
   rm -f /usr/local/bin/charge-icl-guard \
