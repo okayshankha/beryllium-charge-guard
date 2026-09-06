@@ -89,10 +89,47 @@ install_files() {
   systemctl list-timers charge-icl-guard.timer --no-pager || true
 }
 
+restore_saved_icl() {
+  STATE=/run/charge-icl.high
+  [ -r "$STATE" ] || return 0
+
+  high=$(cat "$STATE" 2>/dev/null || true)
+  case "$high" in
+    ''|*[!0-9]*)
+      echo "Warning: ignoring invalid saved ICL value: $high" >&2
+      return 0
+      ;;
+  esac
+
+  # Restore the charger limit before removing the guard. This prevents the
+  # last LOW value from remaining active after uninstall.
+  for node in /sys/class/power_supply/*/input_current_limit \
+              /sys/class/power_supply/*/current_max; do
+    [ -e "$node" ] || continue
+    charger_dir=${node%/*}
+    if [ -e "$charger_dir/online" ] &&
+       [ "$(cat "$charger_dir/online" 2>/dev/null || true)" != "1" ]; then
+      continue
+    fi
+    if [ -w "$node" ]; then
+      printf "%s\n" "$high" > "$node" 2>/dev/null || continue
+      if [ "$(cat "$node" 2>/dev/null || true)" = "$high" ]; then
+        echo "Restored charger input current to ${high} uA."
+        rm -f "$STATE"
+        return 0
+      fi
+    fi
+  done
+
+  echo "Warning: could not restore saved charger input current (${high} uA)." >&2
+}
+
 uninstall_files() {
   echo "Disabling services..."
   systemctl disable --now charge-icl-guard.timer 2>/dev/null || true
   systemctl disable --now charge-icl-guard.service 2>/dev/null || true
+
+  restore_saved_icl
 
   echo "Removing files..."
   rm -f /usr/local/bin/charge-icl-guard \
