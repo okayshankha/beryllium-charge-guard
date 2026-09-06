@@ -7,6 +7,12 @@
 
 set -eu
 
+sh ./fix-line-endings.sh
+sh -n charge_icl_guard.sh
+sh -n battinfo.sh
+sh -n icl-menu.sh
+sh -n install.sh
+
 # --- re-exec as root via doas/sudo if needed ---
 if [ "$(id -u)" -ne 0 ]; then
   if command -v doas >/dev/null 2>&1; then
@@ -75,6 +81,13 @@ install_files() {
   systemctl daemon-reload
   systemctl enable --now charge-icl-guard.timer
 
+  # Apply the policy once immediately so a fresh install/reinstall is active
+  # right away instead of waiting for the next timer tick.
+  echo "Running an immediate guard pass..."
+  if ! systemctl start charge-icl-guard.service; then
+    echo "Warning: initial guard run failed; timer remains installed." >&2
+  fi
+
   echo
   echo "Installed. Quick check:"
   /usr/local/bin/battinfo || true
@@ -82,10 +95,61 @@ install_files() {
   systemctl list-timers charge-icl-guard.timer --no-pager || true
 }
 
+restore_saved_icl() {
+  STATE=/run/charge-icl.high
+  [ -r "$STATE" ] || return 0
+
+  high=$(cat "$STATE" 2>/dev/null || true)
+  case "$high" in
+    ''|*[!0-9]*)
+      echo "Warning: ignoring invalid saved ICL value: $high" >&2
+      return 0
+      ;;
+  esac
+  if [ "$high" -le 0 ] || [ $((high % 25000)) -ne 0 ]; then
+    echo "Warning: ignoring invalid saved ICL value: $high uA." >&2
+    return 0
+  fi
+
+  # Restore the charger limit before removing the guard. This prevents the
+  # last LOW value from remaining active after uninstall.
+  node=/sys/class/power_supply/pmi8998-charger/current_max
+  if [ ! -e "$node" ]; then
+    echo "Warning: Poco F1 charger node not found: $node" >&2
+    return 0
+  fi
+
+  # Sysfs may report online=0 briefly during service shutdown, and its mode
+  # bits are not always a reliable writability check for root.
+  attempt=1
+  while [ "$attempt" -le 3 ]; do
+    if printf "%s\n" "$high" > "$node" 2>/dev/null; then
+      actual=$(cat "$node" 2>/dev/null || true)
+      if [ "$actual" = "$high" ]; then
+        echo "Restored charger input current to ${high} uA."
+        rm -f "$STATE"
+        return 0
+      fi
+    else
+      actual="write failed"
+    fi
+    [ "$attempt" -lt 3 ] && sleep 1
+    attempt=$((attempt + 1))
+  done
+
+  echo "Warning: $node read back ${actual:-unknown} uA (wanted ${high} uA)." >&2
+}
+
 uninstall_files() {
   echo "Disabling services..."
+  # Stop future timer invocations before restoring the limit. Otherwise a
+  # final guard pass can immediately overwrite the restored value with LOW.
   systemctl disable --now charge-icl-guard.timer 2>/dev/null || true
   systemctl disable --now charge-icl-guard.service 2>/dev/null || true
+
+  # Restore after shutdown, retrying briefly in case a final queued invocation
+  # is still completing.
+  restore_saved_icl
 
   echo "Removing files..."
   rm -f /usr/local/bin/charge-icl-guard \
@@ -107,4 +171,3 @@ else
   require_files
   install_files
 fi
-

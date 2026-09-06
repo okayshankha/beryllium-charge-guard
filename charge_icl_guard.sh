@@ -79,6 +79,20 @@ if [ -e "$STATE" ]; then
   ICL_HIGH=$(readf "$STATE")
 else
   ICL_HIGH="$ICL_CUR"
+fi
+
+case "$ICL_HIGH" in
+  ''|*[!0-9]*) log "ERROR: saved high ICL is invalid: $ICL_HIGH"; exit 1 ;;
+esac
+[ "$ICL_HIGH" -gt 0 ] || { log "ERROR: saved high ICL must be greater than zero"; exit 1; }
+[ $((ICL_HIGH % 25000)) -eq 0 ] || {
+  log "ERROR: saved high ICL must be a multiple of 25000 uA"
+  exit 1
+}
+
+# Only save a device-reported positive value. A zero value can appear briefly
+# before the charger negotiates input current and must never become HIGH.
+if [ ! -e "$STATE" ]; then
   echo "$ICL_HIGH" > "$STATE" 2>/dev/null || log "WARNING: Cannot save ICL state to $STATE"
 fi
 

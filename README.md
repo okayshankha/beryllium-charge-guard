@@ -63,7 +63,7 @@ current boot and is not part of the repository.
 From the repository directory on the phone:
 
 ```sh
-sh ./fix-line-endings.sh && sh -n charge_icl_guard.sh && sh -n battinfo.sh && sh -n icl-menu.sh && sh -n install.sh && sudo sh ./install.sh
+sudo sh ./install.sh
 ```
 
 The installer copies scripts to `/usr/local/bin`, installs the systemd units,
