@@ -110,17 +110,27 @@ apply(){
   [ "$val" -gt 0 ] || { log "ERROR: ICL must be greater than zero"; return 1; }
   [ $((val % 25000)) -eq 0 ] || { log "ERROR: ICL must be a multiple of 25000 uA"; return 1; }
   [ "$ICL_CUR" = "$val" ] && { log "ICL already $val, no change"; return 0; }
-  printf "%s\n" "$val" > "$ICL_NODE" 2>/dev/null || {
-    log "ERROR: failed to write ICL=$val to $ICL_NODE"
-    return 1
-  }
-  got=$(readf "$ICL_NODE")
-  [ "$got" = "$val" ] || {
-    log "ERROR: ICL readback=$got (requested $val)"
-    return 1
-  }
-  ICL_CUR="$got"
-  log "set ICL=$got (requested $val) at cap=${cap}%"
+  # Qualcomm charger sysfs values can briefly report the previous negotiated
+  # value while the charger applies a new limit. Retry the write/readback
+  # before treating that transient state as a service failure.
+  attempt=1
+  got=""
+  while [ "$attempt" -le 3 ]; do
+    if printf "%s\n" "$val" > "$ICL_NODE" 2>/dev/null; then
+      got=$(readf "$ICL_NODE")
+      if [ "$got" = "$val" ]; then
+        ICL_CUR="$got"
+        log "set ICL=$got (requested $val) at cap=${cap}%"
+        return 0
+      fi
+    else
+      got="write failed"
+    fi
+    [ "$attempt" -lt 3 ] && sleep 1
+    attempt=$((attempt + 1))
+  done
+  log "ERROR: ICL readback=$got (requested $val) after 3 attempts"
+  return 1
 }
 
 case "$want" in
