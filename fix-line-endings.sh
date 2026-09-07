@@ -10,7 +10,7 @@ for file in "$ROOT"/*; do
   case "$file" in
     *.sh|*.service|*.timer|*.conf|*.md|*.gitattributes)
       sed -i 's/\r$//' "$file"
-      printf 'normalized: %s\n' "${file##*/}"
+      # printf 'normalized: %s\n' "${file##*/}"
       ;;
   esac
 done
